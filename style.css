@@ -351,6 +351,10 @@ a:hover { text-decoration-color: var(--ink); }
 }
 #profile-summary > div:first-child { padding-block-start: 0; }
 #profile-summary > div:last-child { border: 0; padding-block-end: 0; }
+.profile-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.profile-actions button { flex: 1 1 auto; }
+.profile-actions .primary { inline-size: auto; margin: 0; }
+#apply-status { overflow-wrap: anywhere; }
 .dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; margin-top: 16px; }
 .dialog-actions .primary { inline-size: auto; margin: 0; }
 

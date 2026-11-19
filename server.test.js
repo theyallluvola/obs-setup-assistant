@@ -95,3 +95,40 @@ test('disconnecting the browser cancels its upload test', async t => {
   await assert.rejects(response, { name: 'AbortError' });
   await aborted;
 });
+
+test('current-profile updates require a review for the same recommendation and consume it after success', async t => {
+  let writes = 0;
+  const origin = await localApp(t, {
+    detect: async () => ({ encoderIds: { nvencH264: 'obs_nvenc_h264_tex' } }),
+    reviewProfile: async platform => {
+      assert.equal(platform, 'twitch');
+      return { name: 'Streaming', revision: 'internal-revision', changesOutputMode: true };
+    },
+    updateProfile: async (settings, revision, options) => {
+      writes++;
+      assert.equal(settings.encoderId, 'nvencH264');
+      assert.equal(revision, 'internal-revision');
+      assert.deepEqual(options.encoderIds, { nvencH264: 'obs_nvenc_h264_tex' });
+      return { name: 'Streaming', backup: 'local-backup' };
+    }
+  });
+  const settings = { platform: 'twitch', content: 'gameplay', upload: 50, canvas: 1080, cores: 8,
+    available: ['nvencH264'] };
+  const send = body => fetch(origin + '/api/profile', {
+    method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  });
+  const response = await send({ action: 'review', settings });
+  assert.equal(response.status, 200);
+  const review = await response.json();
+  assert.equal(review.name, 'Streaming');
+  assert.equal(review.changesOutputMode, true);
+  assert.ok(review.token);
+  assert.equal(Object.hasOwn(review, 'revision'), false);
+  const update = { action: 'update', settings, token: review.token };
+  assert.equal((await send({ ...update, token: 'unreviewed' })).status, 409);
+  assert.equal((await send({ ...update, settings: { ...settings, canvas: 720 } })).status, 409);
+  assert.equal(writes, 0);
+  assert.deepEqual(await (await send(update)).json(), { name: 'Streaming', backup: 'local-backup' });
+  assert.equal((await send(update)).status, 409);
+  assert.equal(writes, 1);
+});

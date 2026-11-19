@@ -8,8 +8,9 @@ A local Windows app that recommends OBS Studio settings for standard YouTube and
 2. Choose YouTube or Twitch, then Gameplay or Just Chatting. Enter a steady upload result or select **Test sustained upload**. You can set an optional upload ceiling if you know how the connection behaves after an initial speed burst.
 3. Select **Recommend settings**. Copy the result or enter it in OBS under **Settings → Video** and **Settings → Output → Streaming (Advanced)**.
 4. To save the recommendation to OBS, select **Create OBS profile**, review the values, and confirm. Reopen OBS if it was running, select the new profile from the **Profile** menu, and connect your streaming account or enter your key in OBS.
+   To use your existing profile, select it in OBS and make sure its streaming service matches your recommendation. Close OBS, choose **Apply to current OBS profile**, review the profile name and settings, and confirm. The assistant saves a backup inside the profile folder and shows its location. Reopen OBS to use the updated settings.
 5. After applying the settings, select **Start log check**. Start a test stream in OBS, run your usual scene for at least 30 seconds, then stop the stream and select **Check test results**. The assistant looks for network drops, rendering lag, and encoding skips in the new log entries.
-6. Select **Settings still aren’t right** whenever you want the next fallback. It keeps the same base canvas and encoder and reduces the output resolution, frame rate, or video bitrate. Copy it or save it as a new profile, then apply it and test again.
+6. Select **Settings still aren’t right** whenever you want the next fallback. It keeps the same base canvas and encoder and reduces the output resolution, frame rate, or video bitrate. Copy it, save it as a new profile, or apply it to the current profile, then test again.
 
 Open OBS at least once and use **Scan this PC** to confirm the encoders. The encoder selector also accepts manual choices. Choose one OBS actually lists.
 

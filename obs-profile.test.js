@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { recommend } from './advisor.js';
-import { createObsProfile, ObsProfileError } from './obs-profile.js';
+import { createObsProfile, ObsProfileError, reviewCurrentObsProfile, updateCurrentObsProfile } from './obs-profile.js';
 
 async function fixture(t) {
   const appData = await fs.mkdtemp(path.join(import.meta.dirname, '.obs-profile-test-'));
@@ -124,4 +124,79 @@ test('a failed final write never publishes an incomplete profile and can be retr
   failingRename.mock.restore();
   const { name } = await createObsProfile(result, options);
   assert.deepEqual(await fs.readdir(profiles), [name]);
+});
+
+async function currentFixture(t, { legacy = false, oldEncoder = true } = {}) {
+  const { appData, profiles } = await fixture(t);
+  const directory = path.join(profiles, 'Streaming');
+  await fs.mkdir(directory);
+  const config = path.join(appData, 'obs-studio', legacy ? 'global.ini' : 'user.ini');
+  const selection = '[Basic]\nProfile=My Main Profile\nProfileDir=Streaming\n';
+  const ini = '\uFEFF[General]\r\nName=My Main Profile\r\n[Output]\r\nMode=Advanced\r\n' +
+    '[AdvOut]\r\nEncoder=obs_nvenc_av1_tex\r\nRecFilePath=D:\\Recordings\r\n' +
+    'TrackIndex=2\r\nVodTrackEnabled=true\r\nVodTrackIndex=3\r\nRescale=true\r\n';
+  const encoder = '{"preset":"p7","bitrate":20000,"multipass":"fullres"}';
+  const service = '{"type":"rtmp_common","settings":{"service":"YouTube - RTMPS","key":"fixture-only"}}';
+  const files = new Map([['basic.ini', ini], ['service.json', service], ['recordEncoder.json', '{"arbitrary":true}']]);
+  if (oldEncoder) files.set('streamEncoder.json', encoder);
+  await fs.writeFile(config, selection);
+  for (const [file, contents] of files) await fs.writeFile(path.join(directory, file), contents);
+  const options = { appData, encoderIds: { nvencAv1: 'obs_nvenc_av1_tex' }, checkClosed: async () => {} };
+  return { directory, config, selection, files, options, result: recommendation('youtube', 'nvencAv1') };
+}
+
+test('updates the selected OBS profile in place and backs up the two edited files', async t => {
+  const { directory, config, selection, files, options, result } = await currentFixture(t, { legacy: true });
+  const review = await reviewCurrentObsProfile('youtube', options);
+  assert.equal(review.name, 'My Main Profile');
+  assert.equal(review.changesOutputMode, false);
+  const { name, backup } = await updateCurrentObsProfile(result, review.revision, options);
+  assert.equal(name, review.name);
+  assert.equal(path.dirname(backup), directory);
+  assert.equal(await fs.readFile(config, 'utf8'), selection);
+  for (const [file, content] of files) {
+    const stored = ['basic.ini', 'streamEncoder.json'].includes(file) ? backup : directory;
+    assert.equal(await fs.readFile(path.join(stored, file), 'utf8'), content);
+  }
+  assert.deepEqual((await fs.readdir(backup)).sort(), ['basic.ini', 'streamEncoder.json']);
+  const ini = await fs.readFile(path.join(directory, 'basic.ini'), 'utf8');
+  for (const line of ['Mode=Advanced', 'Rescale=false', 'TrackIndex=2', 'Track2Bitrate=128', 'Track3Bitrate=128',
+    'RecFilePath=D:\\Recordings', 'OutputCX=2560', 'FPSCommon=60', 'ChannelSetup=Stereo']) {
+    assert.ok(ini.includes(line + '\r\n'), line);
+  }
+  assert.ok(ini.startsWith('\uFEFF'));
+  const stream = JSON.parse(await fs.readFile(path.join(directory, 'streamEncoder.json'), 'utf8'));
+  assert.equal(stream.bitrate, result.bitrate);
+  assert.equal(stream.preset, 'p5');
+  assert.equal(stream.multipass, 'fullres');
+});
+
+test('rejects an open OBS instance, a mismatched service, and a stale or unsafe profile selection', async t => {
+  const { config, selection, directory, options, result } = await currentFixture(t);
+  const checkClosed = async () => { throw new ObsProfileError('Close OBS'); };
+  await assert.rejects(reviewCurrentObsProfile('youtube', { ...options, checkClosed }), /Close OBS/);
+  await assert.rejects(reviewCurrentObsProfile('twitch', options), /streaming service to Twitch/);
+  const { revision } = await reviewCurrentObsProfile('youtube', options);
+  await fs.appendFile(path.join(directory, 'basic.ini'), 'Track2Bitrate=320\r\n');
+  await assert.rejects(updateCurrentObsProfile(result, revision, options), /profile changed/);
+  await fs.writeFile(config, selection.replace('ProfileDir=Streaming', 'ProfileDir=../Streaming'));
+  await assert.rejects(reviewCurrentObsProfile('youtube', options), /Select a profile/);
+  assert.equal((await fs.readdir(directory)).length, 4);
+});
+
+test('restores the encoder file after a failed profile write or removes it if originally absent', async t => {
+  for (const oldEncoder of [true, false]) {
+    const { directory, files, options, result } = await currentFixture(t, { oldEncoder });
+    const { revision } = await reviewCurrentObsProfile('youtube', options);
+    const rename = fs.rename;
+    const fail = t.mock.method(fs, 'rename', async (from, to) => {
+      if (path.basename(to) === 'basic.ini') throw Object.assign(new Error('simulated failure'), { code: 'ENOSPC' });
+      await rename(from, to);
+    });
+    await assert.rejects(updateCurrentObsProfile(result, revision, options), /could not update/);
+    fail.mock.restore();
+    for (const [file, contents] of files) assert.equal(await fs.readFile(path.join(directory, file), 'utf8'), contents);
+    if (!oldEncoder) await assert.rejects(fs.stat(path.join(directory, 'streamEncoder.json')), { code: 'ENOENT' });
+    await assert.rejects(fs.stat(path.join(directory, '.obs-setup-update.lock')), { code: 'ENOENT' });
+  }
 });

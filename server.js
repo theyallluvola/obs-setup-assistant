@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getAsset, isSea } from 'node:sea';
@@ -7,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { encoders, recommend } from './advisor.js';
 import { runDesktopBridge } from './desktop-bridge.js';
 import { detectHardware } from './hardware.js';
-import { createObsProfile, ObsProfileError } from './obs-profile.js';
+import { createObsProfile, ObsProfileError, reviewCurrentObsProfile, updateCurrentObsProfile } from './obs-profile.js';
 import { createStreamTests } from './stream-test.js';
 import { measureUpload, UploadLimitError } from './upload.js';
 
@@ -50,9 +51,10 @@ const failure = (status, error) => ({ status, payload: { error } });
 const invalidRecommendation = () => failure(400, 'Generate a recommendation before creating an OBS profile.');
 
 export function createApi({ detect = detectHardware, measure = measureUpload, createProfile = createObsProfile,
-  streamTests = createStreamTests() } = {}) {
+  reviewProfile = reviewCurrentObsProfile, updateProfile = updateCurrentObsProfile, streamTests = createStreamTests() } = {}) {
   let measuring = false;
-  let creatingProfile = false;
+  let savingProfile = false;
+  const profileReviews = new Map();
   return async (route, input, signal) => {
     signal.throwIfAborted();
     if (route === '/api/stream-test') {
@@ -73,22 +75,45 @@ export function createApi({ detect = detectHardware, measure = measureUpload, cr
       }
     }
     if (route === '/api/profile') {
+      const action = input?.action ?? 'create';
+      if (!['create', 'review', 'update'].includes(action)) return invalidRecommendation();
+      const updating = action === 'update';
+      const reviewing = action === 'review';
       let settings;
-      try { settings = profileRecommendation(input); } catch { return invalidRecommendation(); }
-      if (!settings.encoderId) return failure(422, 'This recommendation does not have an OBS profile to create.');
-      if (creatingProfile) return failure(409, 'An OBS profile is already being created.');
-      creatingProfile = true;
+      try { settings = profileRecommendation(action === 'create' ? input : input.settings); }
+      catch { return invalidRecommendation(); }
+      if (!settings.encoderId) return failure(422, 'Get a recommendation with a video encoder first.');
+      if (savingProfile) return failure(409, 'An OBS profile is already being saved.');
+      const fingerprint = JSON.stringify(settings);
+      const review = updating ? profileReviews.get(input.token) : undefined;
+      if (updating && (!review || review.fingerprint !== fingerprint)) {
+        return failure(409, 'Close this review and open it again before applying changes.');
+      }
+      savingProfile = true;
       try {
+        if (reviewing) {
+          const { name, revision, changesOutputMode } = await reviewProfile(settings.platform);
+          signal.throwIfAborted();
+          const token = randomUUID();
+          if (profileReviews.size >= 8) profileReviews.delete(profileReviews.keys().next().value);
+          profileReviews.set(token, { revision, fingerprint });
+          return { status: 200, payload: { name, token, changesOutputMode } };
+        }
         const { encoderIds } = await detect();
         signal.throwIfAborted();
+        if (updating) {
+          const profile = await updateProfile(settings, review.revision, { encoderIds });
+          profileReviews.delete(input.token);
+          return { status: 200, payload: profile };
+        }
         const profile = await createProfile(settings, { encoderIds });
         return { status: 201, payload: { name: profile.name } };
       } catch (error) {
         signal.throwIfAborted();
         if (error instanceof ObsProfileError) return failure(422, error.message);
-        return failure(500, 'The OBS profile could not be created.');
+        return failure(500, 'The OBS profile request could not finish.');
       } finally {
-        creatingProfile = false;
+        savingProfile = false;
       }
     }
     if (route === '/api/upload') {

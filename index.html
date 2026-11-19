@@ -81,7 +81,10 @@
             </div>
           </div>
           <p id="copy-status" class="note" role="status"></p>
-          <button type="button" id="apply" class="primary" hidden>Create OBS profile</button>
+          <div class="profile-actions">
+            <button type="button" id="update-profile" class="primary" hidden>Apply to current OBS profile</button>
+            <button type="button" id="apply" class="quiet" hidden>Create OBS profile</button>
+          </div>
           <p id="apply-status" class="note" role="status"></p>
           <section id="stream-test" class="stream-test" aria-labelledby="stream-test-title" hidden>
             <h3 id="stream-test-title">Test these settings</h3>
@@ -103,6 +106,7 @@
     <div class="section-head"><h2 id="profile-title">Review new OBS profile</h2></div>
     <div class="panel-body">
       <p id="profile-help">Assistant will create a new OBS Studio profile with the settings below.</p>
+      <p id="profile-impact" class="note" hidden></p>
       <dl id="profile-summary"></dl>
       <p id="profile-status" class="note" role="status"></p>
       <div class="dialog-actions">

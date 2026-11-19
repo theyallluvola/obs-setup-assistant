@@ -10,8 +10,12 @@ const speed = document.querySelector('#speed');
 const clear = document.querySelector('#clear');
 const copyStatus = document.querySelector('#copy-status');
 const apply = document.querySelector('#apply');
+const updateProfile = document.querySelector('#update-profile');
 const applyStatus = document.querySelector('#apply-status');
 const profileDialog = document.querySelector('#profile-dialog');
+const profileTitle = document.querySelector('#profile-title');
+const profileHelp = document.querySelector('#profile-help');
+const profileImpact = document.querySelector('#profile-impact');
 const profileSummary = document.querySelector('#profile-summary');
 const profileStatus = document.querySelector('#profile-status');
 const saveProfile = document.querySelector('#save-profile');
@@ -29,7 +33,7 @@ let session = new AbortController();
 let hardware = {};
 let recommendation;
 let recommendationInput;
-let profileInput;
+let profileReview;
 let canvasTouched = false;
 let streamRun = {};
 
@@ -184,7 +188,7 @@ function renderRecommendation() {
   streamTest.hidden = !recommendation.encoder;
   testPrevious.hidden = !recommendationInput.fallbackStep;
   copy.hidden = !recommendation.encoder;
-  apply.hidden = copy.hidden;
+  apply.hidden = updateProfile.hidden = copy.hidden;
   copyStatus.textContent = '';
   applyStatus.textContent = '';
   if (!recommendation.encoder) {
@@ -309,8 +313,13 @@ copy.addEventListener('click', async () => {
   }
   if (recommendation === copied) copyStatus.textContent = message;
 });
-apply.addEventListener('click', () => {
-  profileInput = recommendationInput;
+const profileOptions = body => ({
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+});
+
+async function openProfileReview(updating) {
+  const review = { updating, settings: recommendationInput };
+  profileReview = review;
   const { platform, encoder, bitrate } = recommendation;
   const overview = [
     ['Platform', platform === 'youtube' ? 'YouTube' : 'Twitch'],
@@ -319,26 +328,52 @@ apply.addEventListener('click', () => {
   ];
   const settings = result.querySelector('dl').cloneNode(true);
   profileSummary.replaceChildren(...settingRows(overview), ...settings.children);
+  profileTitle.textContent = updating ? 'Review current OBS profile' : 'Review new OBS profile';
+  profileHelp.textContent = updating ? 'Assistant will back up and update the current OBS Studio profile.' :
+    'Assistant will create a new OBS Studio profile with the settings below.';
+  profileImpact.hidden = true;
+  saveProfile.textContent = updating ? 'Apply settings' : 'Create profile';
+  saveProfile.disabled = updating;
   profileStatus.textContent = '';
   delete profileStatus.dataset.state;
   profileDialog.showModal();
-});
+  if (!updating) return;
+  profileStatus.textContent = 'Finding the current OBS profile…';
+  try {
+    const current = await api('/api/profile', profileOptions({ action: 'review', settings: review.settings }));
+    if (profileReview !== review || !profileDialog.open) return;
+    review.token = current.token;
+    profileHelp.textContent = 'Assistant will back up “' + current.name + '” and apply the settings below.';
+    profileImpact.textContent = 'Your streaming account and stream key stay in place. Video and audio changes also affect recordings.' +
+      (current.changesOutputMode ? ' Switching to Advanced output mode activates the profile’s Advanced recording settings.' : '');
+    profileImpact.hidden = false;
+    profileStatus.textContent = '';
+    saveProfile.disabled = false;
+  } catch (error) {
+    if (profileReview !== review || !profileDialog.open) return;
+    profileStatus.dataset.state = 'error';
+    profileStatus.textContent = error.message;
+  }
+}
+
+apply.addEventListener('click', () => openProfileReview(false));
+updateProfile.addEventListener('click', () => openProfileReview(true));
 cancelProfile.addEventListener('click', () => profileDialog.close());
 profileDialog.addEventListener('cancel', event => {
-  if (saveProfile.disabled) event.preventDefault();
+  if (cancelProfile.disabled) event.preventDefault();
 });
 saveProfile.addEventListener('click', async () => {
+  const { updating, settings, token } = profileReview;
   saveProfile.disabled = cancelProfile.disabled = true;
   delete profileStatus.dataset.state;
-  profileStatus.textContent = 'Creating the OBS profile…';
+  profileStatus.textContent = updating ? 'Backing up and updating the OBS profile…' : 'Creating the OBS profile…';
   try {
-    const profile = await api('/api/profile', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(profileInput)
-    });
+    const profile = await api('/api/profile', profileOptions(updating ? { action: 'update', settings, token } : settings));
     profileDialog.close();
-    if (recommendationInput === profileInput) apply.hidden = true;
-    applyStatus.textContent = 'Created “' + profile.name + '”. Reopen OBS if it’s running, select this profile from the Profile menu, then connect your streaming account or enter your stream key in OBS.';
+    if (!updating && recommendationInput === settings) apply.hidden = true;
+    applyStatus.textContent = updating
+      ? 'Updated “' + profile.name + '”. Open OBS to use these settings. Backup saved to ' + profile.backup
+      : 'Created “' + profile.name + '”. Reopen OBS if it’s running, select this profile from the Profile menu, then connect your streaming account or enter your stream key in OBS.';
     copy.focus();
   } catch (error) {
     profileStatus.dataset.state = 'error';
@@ -361,7 +396,7 @@ clear.addEventListener('click', () => {
   form.reset();
   scan.disabled = speed.disabled = false;
   copy.hidden = true;
-  apply.hidden = true;
+  apply.hidden = updateProfile.hidden = true;
   delete hardwareLabel.dataset.state;
   hardwareLabel.textContent = hardwareHint;
   delete network.dataset.state;
