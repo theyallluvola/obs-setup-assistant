@@ -1,34 +1,13 @@
 import http from 'node:http';
 import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { detectHardware } from './hardware.js';
+import { measureUpload, UploadLimitError } from './upload.js';
 
-const cloudflare = 'https://speed.cloudflare.com/__up';
 const pages = new Map([
   ['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']],
   ['/style.css', ['style.css', 'text/css']], ['/advisor.js', ['advisor.js', 'text/javascript']]
 ]);
-
-async function measureUpload() {
-  const buffer = randomBytes(12 * 1024 * 1024);
-  async function sample(bytes) {
-    const start = performance.now();
-    const response = await fetch(cloudflare, {
-      method: 'POST', body: buffer.subarray(0, bytes), signal: AbortSignal.timeout(15000)
-    });
-    if (!response.ok) throw new Error('Upload endpoint unavailable.');
-    await response.arrayBuffer();
-    const elapsed = performance.now() - start;
-    return { elapsed, mbps: bytes * 8 / elapsed / 1000 };
-  }
-  await sample(128 * 1024);
-  const first = await sample(1024 * 1024);
-  const size = first.elapsed > 1700 ? 1024 * 1024 : first.elapsed > 420 ? 4 * 1024 * 1024 : buffer.length;
-  const second = await sample(size);
-  const comparison = size === 1024 * 1024 ? first : await sample(size);
-  return { upload: Math.floor(Math.min(second.mbps, comparison.mbps) * 100) / 100 };
-}
 
 let measuring = false;
 const server = http.createServer(async (req, res) => {
@@ -48,10 +27,16 @@ const server = http.createServer(async (req, res) => {
     if (req.headers.origin !== 'http://' + host) return send(403, '{"error":"Open the app locally to run this test."}');
     if (measuring) return send(409, '{"error":"An upload test is already running."}');
     measuring = true;
+    const test = new AbortController();
+    res.once('close', () => test.abort());
     try {
-      return send(200, JSON.stringify(await measureUpload()));
-    } catch {
-      return send(502, '{"error":"Upload test unavailable. Enter a result from your speed test instead."}');
+      const measurement = await measureUpload(test.signal);
+      if (!res.destroyed) return send(200, JSON.stringify(measurement));
+    } catch (error) {
+      if (res.destroyed) return;
+      const message = error instanceof UploadLimitError ? error.message :
+        'The upload test could not finish. Enter a steady upload result manually.';
+      return send(502, JSON.stringify({ error: message }));
     } finally {
       measuring = false;
     }

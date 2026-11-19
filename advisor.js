@@ -19,10 +19,11 @@ const youtubeAv1 = [[1440, 60, 24000, 6000], [1440, 30, 15000, 5000],
   [720, 60, 6000, 2000], [720, 30, 6000, 2000], [480, 30, 3000, 300]];
 const widthFor = { 1440: 2560, 1080: 1920, 720: 1280, 480: 854 };
 
-export function recommend({ platform, content, upload, canvas, available, cores = 0 }) {
+export function recommend({ platform, content, upload, uploadCeiling, canvas, available, cores = 0 }) {
   if (!['youtube', 'twitch'].includes(platform) || !['gameplay', 'talk'].includes(content) ||
       !Number.isFinite(upload) || upload <= 0 || ![480, 720, 1080, 1440].includes(canvas) ||
-      !Array.isArray(available)) {
+      !Array.isArray(available) ||
+      (uploadCeiling !== undefined && (!Number.isFinite(uploadCeiling) || uploadCeiling <= 0))) {
     throw new Error('Choose your platform and canvas, then enter a positive upload speed.');
   }
   const h264 = ['nvencH264', 'qsvH264', 'amfH264'];
@@ -32,7 +33,8 @@ export function recommend({ platform, content, upload, canvas, available, cores 
   const hardware = encoder !== 'x264';
   const wantsMotion = content === 'gameplay';
   const audio = platform === 'youtube' ? 128 : 160;
-  const budget = Math.max(0, Math.floor((upload * 700 - audio) / 100) * 100);
+  const effectiveUpload = Math.min(upload, uploadCeiling ?? upload);
+  const budget = Math.max(0, Math.floor((effectiveUpload * 700 - audio) / 100) * 100);
   const tiers = platform === 'twitch' ? twitch : av1 ? youtubeAv1 : youtubeH264;
   const maxHeight = hardware ? canvas : Math.min(canvas, wantsMotion || cores < 6 ? 720 : 1080);
   const eligible = tiers.filter(([height, fps]) => height <= maxHeight && (fps === 30 || (hardware && wantsMotion)));
@@ -46,12 +48,12 @@ export function recommend({ platform, content, upload, canvas, available, cores 
   const fallback = [...eligible].sort(([aHeight, aFps], [bHeight, bFps]) => aHeight - bHeight || aFps - bFps)
     .find(([, , , minimum]) => minimum <= budget);
   const selected = ideal || fallback;
-  if (!selected) return { budget, audio, reason: 'This upload speed leaves too little headroom for the profiles this app supports.' };
+  if (!selected) return { budget, audio, effectiveUpload, reason: 'This upload speed leaves too little headroom for the profiles this app supports.' };
   const [height, fps, preferred] = selected;
   return {
     platform, encoder: encoders[encoder], canvas: [widthFor[canvas], canvas],
     output: [widthFor[height], height], fps, bitrate: Math.min(preferred, budget),
-    budget, audio, keyframes: 2, rateControl: 'CBR',
+    budget, audio, effectiveUpload, keyframes: 2, rateControl: 'CBR',
     preset: encoder.startsWith('nvenc') ? 'P5 · High Quality · Look-ahead off' : hardware ? 'Encoder default' : 'veryfast',
     reason: hardware ? 'A hardware encoder leaves more CPU time for the game and OBS.' :
       'Software encoding uses the CPU. The app chose a lighter output to leave headroom.',

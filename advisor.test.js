@@ -32,6 +32,14 @@ test('constrains frame rate, resolution and bitrate for slower connections and s
   assert.throws(() => recommend({ ...session, upload: NaN }));
 });
 
+test('budgets from the lower of measured upload and the verified upload ceiling', () => {
+  const capped = recommend({ ...session, upload: 89.43, uploadCeiling: 50 });
+  assert.equal(capped.effectiveUpload, 50);
+  assert.equal(capped.budget, 34800);
+  const belowCeiling = recommend({ ...session, upload: 40, uploadCeiling: 50 });
+  assert.equal(belowCeiling.effectiveUpload, 40);
+});
+
 test('extracts only hardware and registered encoder details from OBS logs', () => {
   const text = `00:01: OBS 33.0.1 (64-bit, windows)
 00:01: CPU Name: Sample CPU

@@ -48,11 +48,11 @@ async function probe() {
 
 speed.addEventListener('click', async () => {
   speed.disabled = true;
-  network.textContent = 'Measuring your upload speed…';
+  network.textContent = 'Measuring sustained upload. The opening burst is excluded…';
   try {
     const measurement = await api('/api/upload', { method: 'POST' });
     form.elements.upload.value = measurement.upload;
-    network.textContent = 'Measured ' + measurement.upload + ' Mbps upload to Cloudflare.';
+    network.textContent = 'Measured ' + measurement.upload + ' Mbps sustained upload to Cloudflare.';
     form.requestSubmit();
   } catch (error) {
     network.textContent = error.message;
@@ -75,7 +75,9 @@ form.addEventListener('submit', event => {
     method.endsWith('Av1') ? [method, method.replace('Av1', 'H264')] : [method];
   recommendation = recommend({
     platform: form.elements.platform.value, content: form.elements.content.value,
-    upload: form.elements.upload.valueAsNumber, canvas: Number(form.elements.canvas.value),
+    upload: form.elements.upload.valueAsNumber,
+    uploadCeiling: form.elements.uploadCeiling.value ? form.elements.uploadCeiling.valueAsNumber : undefined,
+    canvas: Number(form.elements.canvas.value),
     available, cores: hardware.cores
   });
   result.replaceChildren();
@@ -106,6 +108,7 @@ form.addEventListener('submit', event => {
   }
   result.append(list,
     paragraph(recommendation.reason + ' The bitrate leaves room for upload fluctuations.', 'note'),
+    paragraph('Upload used for this recommendation: ' + recommendation.effectiveUpload + ' Mbps.', 'note'),
     paragraph('Enter these values in OBS under Settings → Video and Settings → Output → Streaming (Advanced).', 'note'),
     paragraph('Test the profile with your real scene and check dropped frames in OBS → View → Stats.', 'note'));
 });

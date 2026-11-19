@@ -35,8 +35,12 @@
           </div>
           <label for="upload">Upload speed</label>
           <div class="upload-row"><div class="unit"><input id="upload" name="upload" type="number" step="any" min="0.01" max="100000" required placeholder="0.0"><span>Mbps</span></div>
-            <button type="button" class="quiet" id="speed">Test upload</button></div>
-          <p class="note" id="network" role="status">The test sends up to 27 MB of sample data to Cloudflare.</p>
+            <button type="button" class="quiet" id="speed">Test sustained upload</button></div>
+          <p class="note" id="network" role="status">About 20 seconds. Uses up to 270 MB of sample data on Cloudflare. You can enter a speed manually.</p>
+          <label class="ceiling">Upload ceiling (optional)
+            <input name="uploadCeiling" type="number" step="any" min="0.01" max="100000" placeholder="Mbps" aria-describedby="ceiling-help">
+          </label>
+          <p class="note" id="ceiling-help">Use a known steady upload limit if your connection can burst above it.</p>
           <button type="submit" class="primary">Recommend settings</button>
         </form>
       </div>
