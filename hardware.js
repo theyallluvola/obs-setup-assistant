@@ -1,7 +1,9 @@
 import { execFile } from 'node:child_process';
-import { readdir, readFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { readdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
@@ -14,27 +16,54 @@ const patterns = {
   amfH264: /(?:h264_texture_amf|h264_amf|amd_amf_h264)\b/i
 };
 
-export function parseObsLog(text) {
-  const output = [...text.matchAll(/base resolution:\s+(\d+)x(\d+)/gi)].at(-1);
-  const available = Object.keys(patterns).filter(id =>
-    text.split(/\r?\n/).some(line => /\s-\s/.test(line) && patterns[id].test(line)));
+function summarizeLog() {
+  const summary = { obs: '', cpu: '', cores: 0, gpus: [], canvas: 0, available: [] };
+  const gpus = new Set();
+  const available = new Set();
+
   return {
-    obs: text.match(/\bOBS (\d+\.\d+\.\d+)/)?.[1] || '',
-    cpu: text.match(/CPU Name:\s*([^\r\n]+)/i)?.[1]?.trim() || '',
-    cores: Number(text.match(/Physical Cores:\s*(\d+)/i)?.[1] || 0),
-    gpus: [...new Set([...text.matchAll(/Adapter \d+:\s*([^\r\n]+)/gi)].map(match => match[1].trim()))],
-    canvas: output ? Number(output[2]) : 0,
-    available
+    add(line) {
+      const entry = line.replace(/^\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?:\s*/, '').trim();
+      const version = /^OBS (\d+\.\d+\.\d+)/.exec(entry);
+      const cpu = /^CPU Name:\s*(.{1,160})$/i.exec(entry);
+      const cores = /^Physical Cores:\s*(\d+)/i.exec(entry);
+      const gpu = /^Adapter \d+:\s*(.{1,160})$/i.exec(entry);
+      const canvas = /^base resolution:\s*\d+x(\d+)$/i.exec(entry);
+      if (version) summary.obs ||= version[1];
+      if (cpu) summary.cpu ||= cpu[1];
+      if (cores) summary.cores ||= Number(cores[1]);
+      if (gpu) gpus.add(gpu[1]);
+      if (canvas) summary.canvas = Number(canvas[1]);
+      if (entry.startsWith('- ')) {
+        for (const [id, pattern] of Object.entries(patterns)) {
+          if (pattern.test(entry)) available.add(id);
+        }
+      }
+    },
+    result() {
+      return { ...summary, gpus: [...gpus], available: [...available] };
+    }
   };
+}
+
+export function parseObsLog(text) {
+  const parsed = summarizeLog();
+  for (const line of text.split(/\r?\n/)) parsed.add(line);
+  return parsed.result();
 }
 
 async function obsHardware() {
   if (!process.env.APPDATA) return {};
   const directory = path.join(process.env.APPDATA, 'obs-studio', 'logs');
   try {
-    const files = (await readdir(directory)).filter(name => /^\d{4}-.*\.txt$/i.test(name)).sort().reverse();
+    const files = (await readdir(directory, { withFileTypes: true }))
+      .filter(entry => entry.isFile() && /^\d{4}-.*\.txt$/i.test(entry.name))
+      .map(entry => entry.name).sort().reverse();
     for (const filename of files.slice(0, 3)) {
-      const data = parseObsLog(await readFile(path.join(directory, filename), 'utf8'));
+      const parsed = summarizeLog();
+      const input = createReadStream(path.join(directory, filename), { encoding: 'utf8', end: 8 * 1024 ** 2 - 1 });
+      for await (const line of createInterface({ input, crlfDelay: Infinity })) parsed.add(line);
+      const data = parsed.result();
       if (data.obs) return data;
     }
   } catch {

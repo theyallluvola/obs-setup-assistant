@@ -11,6 +11,7 @@
 body { margin: 0; }
 main { width: min(1120px, 100%); margin: 0 auto; padding: 25px clamp(16px, 4vw, 42px) 40px; }
 header { display: flex; align-items: center; gap: 10px; padding-bottom: 23px; border-bottom: 1px solid var(--border); font-weight: 650; }
+header button { margin-left: auto; }
 .mark { color: var(--accent); font-size: 23px; line-height: 1; }
 h1 { margin: 42px 0 6px; font-size: clamp(43px, 8vw, 78px); font-weight: 670; line-height: 1.06; letter-spacing: -.065em; }
 .lede { margin: 0 0 32px; color: var(--muted); font-size: 17px; }
@@ -39,6 +40,7 @@ button:disabled { opacity: .65; cursor: wait; }
 .unit input { padding-right: 65px; }
 .unit span { position: absolute; right: 14px; top: 10px; color: var(--muted); pointer-events: none; font-size: 13px; }
 .note { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+.note:empty { display: none; }
 .empty { color: var(--muted); margin: 23px 0 16px; }
 .output-format { font-size: clamp(47px, 8vw, 78px); line-height: .95; letter-spacing: -.07em; color: var(--accent); margin: 25px 0 9px; font-weight: 650; }
 .output-summary { font-size: 16px; margin: 0 0 17px; }

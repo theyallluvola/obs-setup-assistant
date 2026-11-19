@@ -45,7 +45,7 @@ export async function measureUpload(signal) {
   const deadline = AbortSignal.timeout(35000);
   return sampleSustainedUpload(async bytes => {
     const response = await fetch(endpoint, {
-      method: 'POST', body: buffer.subarray(0, bytes),
+      method: 'POST', body: buffer.subarray(0, bytes), redirect: 'error',
       signal: AbortSignal.any([signal, deadline, AbortSignal.timeout(12000)])
     });
     if (!response.ok) throw new Error('Upload endpoint unavailable.');

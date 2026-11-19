@@ -9,16 +9,16 @@
 </head>
 <body>
   <main>
-    <header><span class="mark" aria-hidden="true">◉</span><span>OBS Setup Assistant</span></header>
+    <header><span class="mark" aria-hidden="true">◉</span><span>OBS Setup Assistant</span><button type="button" id="clear" class="quiet">Clear session</button></header>
     <h1>Dial in your stream.</h1>
     <p class="lede">Get OBS settings matched to your encoder, upload speed, and what you stream.</p>
     <div class="workspace">
       <div>
         <section class="panel hardware" aria-labelledby="hardware-title">
-          <div class="section-head"><h2 id="hardware-title">Your PC</h2><button type="button" id="scan" class="quiet">Scan again</button></div>
-          <p id="hardware" aria-live="polite">Checking your hardware…</p>
+          <div class="section-head"><h2 id="hardware-title">Your PC</h2><button type="button" id="scan" class="quiet">Scan this PC</button></div>
+          <p id="hardware" aria-live="polite">Scan locally for PC specs and OBS encoders, or pick an encoder manually.</p>
         </section>
-        <form class="panel" id="stream">
+        <form class="panel" id="stream" autocomplete="off">
           <h2>Stream setup</h2>
           <div class="pair">
             <label>Platform<select name="platform"><option value="youtube">YouTube</option><option value="twitch">Twitch</option></select></label>
@@ -36,7 +36,8 @@
           <label for="upload">Upload speed</label>
           <div class="upload-row"><div class="unit"><input id="upload" name="upload" type="number" step="any" min="0.01" max="100000" required placeholder="0.0"><span>Mbps</span></div>
             <button type="button" class="quiet" id="speed">Test sustained upload</button></div>
-          <p class="note" id="network" role="status">About 20 seconds. Uses up to 270 MB of sample data on Cloudflare. You can enter a speed manually.</p>
+          <p class="note" id="network" role="status"></p>
+          <p class="note">The optional test takes about 20 seconds. Cloudflare receives your IP address and up to 270 MB of generated test data. Enter a speed manually to use the app offline. <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare privacy policy</a></p>
           <label class="ceiling">Upload ceiling (optional)
             <input name="uploadCeiling" type="number" step="any" min="0.01" max="100000" placeholder="Mbps" aria-describedby="ceiling-help">
           </label>

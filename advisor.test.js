@@ -50,6 +50,8 @@ test('extracts only hardware and registered encoder details from OBS logs', () =
 00:01:     - obs_nvenc_h264_tex (NVIDIA NVENC H.264)
 00:02:     base resolution: 1920x1080
 00:03: unrelated settings: h264_amf
+00:03: source title: CPU Name: Private note
+00:03: source title: Adapter 1: Private note
 00:03: unrelated profile value: test-only`;
   assert.deepEqual(parseObsLog(text), {
     obs: '33.0.1', cpu: 'Sample CPU', cores: 16, gpus: ['Sample GPU'],

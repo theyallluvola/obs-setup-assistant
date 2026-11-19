@@ -7,7 +7,11 @@ const result = document.querySelector('#result');
 const copy = document.querySelector('#copy');
 const scan = document.querySelector('#scan');
 const speed = document.querySelector('#speed');
+const clear = document.querySelector('#clear');
 const copyStatus = document.querySelector('#copy-status');
+const hardwareHint = 'Scan locally for PC specs and OBS encoders, or pick an encoder manually.';
+const resultHint = 'Enter your upload speed or run the test to get a streaming profile.';
+let session = new AbortController();
 let hardware = {};
 let recommendation;
 let canvasTouched = false;
@@ -20,10 +24,13 @@ async function api(path, options) {
 }
 
 async function probe() {
+  const { signal } = session;
   scan.disabled = true;
   hardwareLabel.textContent = 'Checking your hardware…';
   try {
-    hardware = await api('/api/hardware');
+    const detected = await api('/api/hardware', { method: 'POST', signal });
+    if (signal.aborted) return;
+    hardware = detected;
     hardwareLabel.replaceChildren();
     const details = [
       [hardware.cpu, hardware.ram ? hardware.ram + ' GB RAM' : ''].filter(Boolean).join(' · '),
@@ -40,24 +47,26 @@ async function probe() {
       form.elements.canvas.value = hardware.canvas;
     }
   } catch {
-    hardwareLabel.textContent = 'Hardware scan unavailable. Select your encoder manually to continue.';
+    if (!signal.aborted) hardwareLabel.textContent = 'Hardware scan unavailable. Select your encoder manually to continue.';
   } finally {
-    scan.disabled = false;
+    if (!signal.aborted) scan.disabled = false;
   }
 }
 
 speed.addEventListener('click', async () => {
+  const { signal } = session;
   speed.disabled = true;
   network.textContent = 'Measuring sustained upload. The opening burst is excluded…';
   try {
-    const measurement = await api('/api/upload', { method: 'POST' });
+    const measurement = await api('/api/upload', { method: 'POST', signal });
+    if (signal.aborted) return;
     form.elements.upload.value = measurement.upload;
     network.textContent = 'Measured ' + measurement.upload + ' Mbps sustained upload to Cloudflare.';
     form.requestSubmit();
   } catch (error) {
-    network.textContent = error.message;
+    if (!signal.aborted) network.textContent = error.message;
   } finally {
-    speed.disabled = false;
+    if (!signal.aborted) speed.disabled = false;
   }
 });
 
@@ -122,5 +131,18 @@ copy.addEventListener('click', async () => {
   }
 });
 form.elements.canvas.addEventListener('change', () => { canvasTouched = true; });
+clear.addEventListener('click', () => {
+  session.abort();
+  session = new AbortController();
+  hardware = {};
+  recommendation = undefined;
+  canvasTouched = false;
+  form.reset();
+  scan.disabled = speed.disabled = false;
+  copy.hidden = true;
+  hardwareLabel.textContent = hardwareHint;
+  network.textContent = '';
+  result.replaceChildren(paragraph(resultHint, 'empty'));
+  copyStatus.textContent = 'Session cleared.';
+});
 scan.addEventListener('click', probe);
-void probe();
