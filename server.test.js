@@ -28,7 +28,7 @@ test('loads the offline page without detection or network tests and restricts bo
   assert.match(page.headers.get('content-security-policy'), /connect-src 'self'/);
   assert.match(await page.text(), /Cloudflare receives your IP address/);
 
-  for (const route of ['/api/hardware', '/api/upload']) {
+  for (const route of ['/api/hardware', '/api/upload', '/api/profile', '/api/stream-test']) {
     assert.equal((await fetch(origin + route)).status, 405);
     assert.equal((await fetch(origin + route, { method: 'POST' })).status, 403);
     assert.equal((await fetch(origin + route, {
@@ -42,6 +42,35 @@ test('loads the offline page without detection or network tests and restricts bo
   assert.deepEqual(await (await fetch(origin + '/api/upload', options)).json(), { upload: 50 });
   assert.equal(scans, 1);
   assert.equal(uploads, 1);
+});
+
+test('creates an OBS profile only for a valid local recommendation', async t => {
+  let writes = 0;
+  const origin = await localApp(t, {
+    detect: async () => ({ available: ['nvencAv1'], encoderIds: { nvencAv1: 'obs_nvenc_av1_tex' } }),
+    createProfile: async (settings, options) => {
+      writes++;
+      assert.equal(settings.encoderId, 'nvencAv1');
+      assert.equal(settings.bitrate, 12000);
+      assert.deepEqual(options.encoderIds, { nvencAv1: 'obs_nvenc_av1_tex' });
+      return { name: 'Example profile' };
+    }
+  });
+  const send = (input, requestOrigin = origin) => fetch(origin + '/api/profile', {
+    method: 'POST', headers: { Origin: requestOrigin, 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+  const input = { platform: 'youtube', content: 'gameplay', upload: 50, canvas: 1080, cores: 8,
+    available: ['nvencAv1'] };
+  assert.equal((await send(input, 'https://external.invalid')).status, 403);
+  assert.equal((await send({ ...input, upload: -1 })).status, 400);
+  assert.equal((await send({ ...input, filler: 'x'.repeat(4096) })).status, 400);
+  assert.equal((await send({ ...input, upload: 0.01 })).status, 422);
+  assert.equal(writes, 0);
+  const response = await send(input);
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), { name: 'Example profile' });
+  assert.equal(writes, 1);
 });
 
 test('disconnecting the browser cancels its upload test', async t => {

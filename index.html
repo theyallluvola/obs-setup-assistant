@@ -1,57 +1,115 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-type="software">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="page-type" content="software">
+  <meta name="site-kind" content="software">
   <title>OBS Setup Assistant</title>
+  <link rel="icon" href="/assets/obs-setup.ico" type="image/x-icon">
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
 </head>
 <body>
   <main>
-    <header><span class="mark" aria-hidden="true">◉</span><span>OBS Setup Assistant</span><button type="button" id="clear" class="quiet">Clear session</button></header>
-    <h1>Dial in your stream.</h1>
-    <p class="lede">Get OBS settings matched to your encoder, upload speed, and what you stream.</p>
+    <header class="masthead">
+      <h1>OBS Setup Assistant</h1>
+      <div class="masthead-line">
+        <p class="lede">Get OBS settings matched to your encoder, upload speed, and what you stream.</p>
+        <button type="button" id="clear" class="quiet">Clear session</button>
+      </div>
+    </header>
     <div class="workspace">
-      <div>
+      <div class="setup">
         <section class="panel hardware" aria-labelledby="hardware-title">
           <div class="section-head"><h2 id="hardware-title">Your PC</h2><button type="button" id="scan" class="quiet">Scan this PC</button></div>
-          <p id="hardware" aria-live="polite">Scan locally for PC specs and OBS encoders, or pick an encoder manually.</p>
+          <p class="panel-body" id="hardware" aria-live="polite">Scan locally for PC specs and OBS encoders, or pick an encoder manually.</p>
         </section>
         <form class="panel" id="stream" autocomplete="off">
-          <h2>Stream setup</h2>
-          <div class="pair">
-            <label>Platform<select name="platform"><option value="youtube">YouTube</option><option value="twitch">Twitch</option></select></label>
-            <label>Content<select name="content"><option value="gameplay">Gameplay</option><option value="talk">Just Chatting</option></select></label>
+          <div class="section-head"><h2>Stream setup</h2></div>
+          <div class="panel-body">
+            <div class="pair">
+              <fieldset>
+                <legend>Platform</legend>
+                <div class="choices">
+                  <label><input type="radio" name="platform" value="youtube" checked><span>YouTube</span></label>
+                  <label><input type="radio" name="platform" value="twitch"><span>Twitch</span></label>
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend>Content</legend>
+                <div class="choices">
+                  <label><input type="radio" name="content" value="gameplay" checked><span>Gameplay</span></label>
+                  <label><input type="radio" name="content" value="talk"><span>Just Chatting</span></label>
+                </div>
+              </fieldset>
+            </div>
+            <div class="pair video-fields">
+              <label>Base canvas<select name="canvas"><option value="1440">2560 × 1440</option><option value="1080" selected>1920 × 1080</option><option value="720">1280 × 720</option><option value="480">854 × 480</option></select></label>
+              <label>Encoder<select name="encoder">
+                <option value="auto">Auto detect</option><option value="nvencAv1">NVIDIA NVENC AV1 + H.264</option>
+                <option value="nvencH264">NVIDIA NVENC H.264</option><option value="qsvAv1">Intel Quick Sync AV1 + H.264</option>
+                <option value="qsvH264">Intel Quick Sync H.264</option><option value="amfAv1">AMD AV1 + H.264</option>
+                <option value="amfH264">AMD H.264</option><option value="x264">x264 (CPU)</option>
+              </select></label>
+            </div>
+            <fieldset class="connection">
+              <legend>Connection</legend>
+              <label for="upload">Upload speed</label>
+              <div class="upload-row">
+                <div class="unit"><input id="upload" name="upload" type="number" step="any" min="0.01" max="100000" required placeholder="0.0" aria-describedby="upload-unit"><span id="upload-unit">Mbps</span></div>
+                <button type="button" class="quiet" id="speed" aria-describedby="upload-disclosure">Test sustained upload</button>
+              </div>
+              <p class="note" id="network" role="status"></p>
+              <p class="note" id="upload-disclosure">The optional test takes about 20 seconds. Cloudflare receives your IP address and up to 270 MB of generated test data. Enter a speed manually to use the app offline. <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare privacy policy</a></p>
+              <label class="ceiling" for="upload-ceiling">Upload ceiling <span class="optional">(optional)</span></label>
+              <div class="unit"><input id="upload-ceiling" name="uploadCeiling" type="number" step="any" min="0.01" max="100000" placeholder="0.0" aria-describedby="ceiling-unit ceiling-help"><span id="ceiling-unit">Mbps</span></div>
+              <p class="note" id="ceiling-help">Use a known steady upload limit if your connection can burst above it.</p>
+            </fieldset>
+            <button type="submit" class="primary"><span aria-hidden="true">[</span> Recommend settings <span aria-hidden="true">]</span></button>
           </div>
-          <div class="pair">
-            <label>Base canvas<select name="canvas"><option value="1440">2560 × 1440</option><option value="1080" selected>1920 × 1080</option><option value="720">1280 × 720</option><option value="480">854 × 480</option></select></label>
-            <label>Encoder<select name="encoder">
-              <option value="auto">Auto detect</option><option value="nvencAv1">NVIDIA NVENC AV1 + H.264</option>
-              <option value="nvencH264">NVIDIA NVENC H.264</option><option value="qsvAv1">Intel Quick Sync AV1 + H.264</option>
-              <option value="qsvH264">Intel Quick Sync H.264</option><option value="amfAv1">AMD AV1 + H.264</option>
-              <option value="amfH264">AMD H.264</option><option value="x264">x264 (CPU)</option>
-            </select></label>
-          </div>
-          <label for="upload">Upload speed</label>
-          <div class="upload-row"><div class="unit"><input id="upload" name="upload" type="number" step="any" min="0.01" max="100000" required placeholder="0.0"><span>Mbps</span></div>
-            <button type="button" class="quiet" id="speed">Test sustained upload</button></div>
-          <p class="note" id="network" role="status"></p>
-          <p class="note">The optional test takes about 20 seconds. Cloudflare receives your IP address and up to 270 MB of generated test data. Enter a speed manually to use the app offline. <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare privacy policy</a></p>
-          <label class="ceiling">Upload ceiling (optional)
-            <input name="uploadCeiling" type="number" step="any" min="0.01" max="100000" placeholder="Mbps" aria-describedby="ceiling-help">
-          </label>
-          <p class="note" id="ceiling-help">Use a known steady upload limit if your connection can burst above it.</p>
-          <button type="submit" class="primary">Recommend settings</button>
         </form>
       </div>
       <section class="panel result" aria-labelledby="result-title">
         <div class="section-head"><h2 id="result-title">Recommended settings</h2><button type="button" class="quiet" id="copy" hidden>Copy settings</button></div>
-        <div id="result" aria-live="polite"><p class="empty">Enter your upload speed or run the test to get a streaming profile.</p></div>
-        <p id="copy-status" class="note" role="status"></p>
+        <div class="panel-body">
+          <div id="result" aria-live="polite">
+            <div class="output-preview output-preview--empty">
+              <span class="preview-frame" aria-hidden="true"></span>
+              <p class="empty">Enter your upload speed or run the test to get a streaming profile.</p>
+            </div>
+          </div>
+          <p id="copy-status" class="note" role="status"></p>
+          <button type="button" id="apply" class="primary" hidden>Create OBS profile</button>
+          <p id="apply-status" class="note" role="status"></p>
+          <section id="stream-test" class="stream-test" aria-labelledby="stream-test-title" hidden>
+            <h3 id="stream-test-title">Test these settings</h3>
+            <p class="note">Apply the settings in OBS, then start the log check before you start a test stream.</p>
+            <div class="test-actions">
+              <button type="button" id="test-start" class="quiet">Start log check</button>
+              <button type="button" id="test-check" class="quiet" hidden>Check test results</button>
+              <button type="button" id="test-fallback" class="quiet">Settings still aren’t right</button>
+              <button type="button" id="test-previous" class="quiet" hidden>Previous settings</button>
+            </div>
+            <p id="test-status" class="note" role="status"></p>
+          </section>
+        </div>
       </section>
     </div>
     <footer><a href="https://support.google.com/youtube/answer/2853702">YouTube guidelines</a><a href="https://help.twitch.tv/s/article/broadcasting-guidelines?language=en_US">Twitch guidelines</a><a href="https://obsproject.com/kb/stream-connection-troubleshooting/">OBS connection guide</a></footer>
   </main>
+  <dialog id="profile-dialog" class="panel" aria-labelledby="profile-title" aria-describedby="profile-help">
+    <div class="section-head"><h2 id="profile-title">Review new OBS profile</h2></div>
+    <div class="panel-body">
+      <p id="profile-help">Assistant will create a new OBS Studio profile with the settings below.</p>
+      <dl id="profile-summary"></dl>
+      <p id="profile-status" class="note" role="status"></p>
+      <div class="dialog-actions">
+        <button type="button" id="cancel-profile" class="quiet" autofocus>Cancel</button>
+        <button type="button" id="save-profile" class="primary">Create profile</button>
+      </div>
+    </div>
+  </dialog>
 </body>
 </html>

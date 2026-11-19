@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>OBS-Setup-Assistant-Desktop</AssemblyName>
+    <Product>OBS Setup Assistant</Product>
+    <ApplicationIcon>../assets/obs-setup.ico</ApplicationIcon>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4022.49" />
+    <EmbeddedResource Include="../index.html" LogicalName="index.html" />
+    <EmbeddedResource Include="../style.css" LogicalName="style.css" />
+    <EmbeddedResource Include="../app.js" LogicalName="app.js" />
+    <EmbeddedResource Include="../advisor.js" LogicalName="advisor.js" />
+    <EmbeddedResource Include="../assets/Silkscreen-Bold.ttf" LogicalName="Silkscreen-Bold.ttf" />
+    <EmbeddedResource Include="../assets/obs-setup.ico" LogicalName="obs-setup.ico" />
+    <EmbeddedResource Include="$(AssistantEngine)" LogicalName="engine.exe" Condition="'$(AssistantEngine)' != ''" />
+  </ItemGroup>
+  <Target Name="CheckAssistantEngine" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(AssistantEngine)' == '' Or !Exists('$(AssistantEngine)')" Text="Build the embedded engine first with scripts/build-desktop.ps1." />
+  </Target>
+</Project>

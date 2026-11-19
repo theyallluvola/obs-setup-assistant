@@ -19,7 +19,7 @@ const patterns = {
 function summarizeLog() {
   const summary = { obs: '', cpu: '', cores: 0, gpus: [], canvas: 0, available: [] };
   const gpus = new Set();
-  const available = new Set();
+  const encoderIds = new Map();
 
   return {
     add(line) {
@@ -34,22 +34,29 @@ function summarizeLog() {
       if (cores) summary.cores ||= Number(cores[1]);
       if (gpu) gpus.add(gpu[1]);
       if (canvas) summary.canvas = Number(canvas[1]);
-      if (entry.startsWith('- ')) {
+      const encoder = /^- ([\w]+)\s+\(/.exec(entry)?.[1];
+      if (encoder) {
+        if (encoder === 'obs_x264') encoderIds.set('x264', encoder);
         for (const [id, pattern] of Object.entries(patterns)) {
-          if (pattern.test(entry)) available.add(id);
+          if (pattern.exec(encoder)?.[0] === encoder && !encoderIds.has(id)) encoderIds.set(id, encoder);
         }
       }
     },
     result() {
-      return { ...summary, gpus: [...gpus], available: [...available] };
+      return {
+        ...summary, gpus: [...gpus],
+        available: [...encoderIds.keys()].filter(id => id !== 'x264'),
+        encoderIds: Object.fromEntries(encoderIds)
+      };
     }
   };
 }
 
-export function parseObsLog(text) {
+export function parseObsLog(text, { includeEncoderIds = false } = {}) {
   const parsed = summarizeLog();
   for (const line of text.split(/\r?\n/)) parsed.add(line);
-  return parsed.result();
+  const { encoderIds, ...hardware } = parsed.result();
+  return includeEncoderIds ? { ...hardware, encoderIds } : hardware;
 }
 
 async function obsHardware() {
@@ -93,6 +100,7 @@ export async function detectHardware() {
     gpus: obs.gpus?.length ? obs.gpus : windows.gpus || [],
     obs: obs.obs || '',
     canvas: obs.canvas || 0,
-    available: obs.available || []
+    available: obs.available || [],
+    encoderIds: obs.encoderIds || {}
   };
 }

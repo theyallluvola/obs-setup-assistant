@@ -19,10 +19,21 @@ const youtubeAv1 = [[1440, 60, 24000, 6000], [1440, 30, 15000, 5000],
   [720, 60, 6000, 2000], [720, 30, 6000, 2000], [480, 30, 3000, 300]];
 const widthFor = { 1440: 2560, 1080: 1920, 720: 1280, 480: 854 };
 
-export function recommend({ platform, content, upload, uploadCeiling, canvas, available, cores = 0 }) {
+function nextFallback(current, priority) {
+  const { tier: [height, fps, , minimum], bitrate } = current;
+  const reduced = Math.floor(bitrate * .8 / 100) * 100;
+  const tier = priority.find(([nextHeight, nextFps, , floor]) =>
+    nextHeight <= height && nextFps <= fps && (nextHeight < height || nextFps < fps) && floor <= bitrate);
+  if (tier) return { tier, bitrate: Math.min(tier[2], bitrate, Math.max(tier[3], reduced)) };
+  const capped = Math.max(minimum, reduced);
+  return capped < bitrate ? { tier: current.tier, bitrate: capped } : null;
+}
+
+export function recommend({ platform, content, upload, uploadCeiling, canvas, available, cores = 0, fallbackStep = 0 }) {
   if (!['youtube', 'twitch'].includes(platform) || !['gameplay', 'talk'].includes(content) ||
       !Number.isFinite(upload) || upload <= 0 || ![480, 720, 1080, 1440].includes(canvas) ||
       !Array.isArray(available) ||
+      !Number.isInteger(fallbackStep) || fallbackStep < 0 || fallbackStep > 32 ||
       (uploadCeiling !== undefined && (!Number.isFinite(uploadCeiling) || uploadCeiling <= 0))) {
     throw new Error('Choose your platform and canvas, then enter a positive upload speed.');
   }
@@ -49,15 +60,20 @@ export function recommend({ platform, content, upload, uploadCeiling, canvas, av
     .find(([, , , minimum]) => minimum <= budget);
   const selected = ideal || fallback;
   if (!selected) return { budget, audio, effectiveUpload, reason: 'This upload speed leaves too little headroom for the profiles this app supports.' };
-  const [height, fps, preferred] = selected;
+  let setup = { tier: selected, bitrate: Math.min(selected[2], budget) };
+  for (let step = 0; step < fallbackStep && setup; step++) setup = nextFallback(setup, priority);
+  if (!setup) return { budget, audio, effectiveUpload, reason: 'No lower supported profile is available for these inputs.' };
+  const [height, fps] = setup.tier;
   return {
-    platform, encoder: encoders[encoder], canvas: [widthFor[canvas], canvas],
-    output: [widthFor[height], height], fps, bitrate: Math.min(preferred, budget),
+    platform, encoderId: encoder, encoder: encoders[encoder], canvas: [widthFor[canvas], canvas],
+    output: [widthFor[height], height], fps, bitrate: setup.bitrate,
     budget, audio, effectiveUpload, keyframes: 2, rateControl: 'CBR',
     preset: encoder.startsWith('nvenc') ? 'P5 · High Quality · Look-ahead off' : hardware ? 'Encoder default' : 'veryfast',
-    reason: hardware ? 'A hardware encoder leaves more CPU time for the game and OBS.' :
+    reason: fallbackStep ? 'This fallback reduces the output workload or video bitrate. Apply it and test it with your usual scene.' :
+      hardware ? 'A hardware encoder leaves more CPU time for the game and OBS.' :
       'Software encoding uses the CPU. The app chose a lighter output to leave headroom.',
-    constrained: !ideal || height === 480
+    constrained: !ideal || height === 480 || fallbackStep > 0,
+    hasFallback: nextFallback(setup, priority) !== null
   };
 }
 

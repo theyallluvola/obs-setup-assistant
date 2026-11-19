@@ -4,14 +4,16 @@ OBS Setup Assistant runs on your computer. You can enter an encoder and upload s
 
 | When you choose | What the app uses | Where it goes |
 | --- | --- | --- |
-| **Scan this PC** | CPU and GPU model names, core count, RAM, OBS version, canvas height, and available encoders. The scanner checks Windows and reads up to the first 8 MiB of each of up to three recent OBS logs as needed. It keeps only the listed fields from the log. | From the local app to this browser tab over the local computer address. |
+| **Scan this PC** | CPU and GPU model names, core count, RAM, OBS version, canvas height, and available encoders. The scanner checks Windows and reads up to the first 8 MiB of each of up to three recent OBS logs as needed. It keeps only the listed fields from the log. | Through a private connection within the desktop app, or over the local computer address in the browser version. |
 | **Test sustained upload** | Generated test bytes and the timing of the HTTPS requests. Cloudflare receives the source IP address and standard connection and request information. Up to 256 MiB of test payload is sent. | Cloudflare's speed test endpoint. The app calculates the result on your PC. |
-| **Recommend settings** | Your platform, content type, canvas, encoder, upload speed, and any upload ceiling. | Calculated in the browser tab. |
+| **Recommend settings** | Your platform, content type, canvas, encoder, upload speed, and any upload ceiling. | Calculated on this PC in the app window or browser tab. |
 | **Copy settings** | The recommended OBS settings. | Your system clipboard. Windows may keep clipboard history or sync it if you enabled those features. |
+| **Create OBS profile** | The recommendation and OBS encoder IDs verified from a local log. | Written locally to a new OBS Studio profile after confirmation. The profile stays on your PC until you remove it in OBS. |
+| **Start log check / Check test results** | Recent OBS log offsets, stream start and stop times, and frame counts for the test. Checks read up to 1 MiB of new entries per inspected log. | Parsed locally. The app displays the summary counts and keeps starting offsets in memory. Each check expires after 30 minutes. |
 
-The app keeps inputs and results in the current tab's memory. **Clear session** resets the displayed information and cancels the app's in-progress upload request. Reloading or closing the tab drops the current results. Previously copied settings stay in the system clipboard until replaced or cleared. Windows, the browser, and Cloudflare handle their own history and records.
+The app keeps inputs and results in the current window or tab's memory. **Clear session** resets the displayed information and cancels the app's in-progress upload request. Reloading or closing the interface drops the current results. Previously copied settings stay in the system clipboard until replaced or cleared. Windows, the browser, and Cloudflare handle their own history and records.
 
-The app includes no analytics, accounts, cookies, or saved profiles. It reads OBS logs for hardware detection and leaves OBS profile files alone. The only external request made by the app is the optional speed test. If you open an external reference link, your browser connects to that site.
+The app includes no analytics, accounts, or cookies. Profile creation preserves your existing OBS profiles and scene collections. Configure your streaming credentials in OBS. The only external request made by the app is the optional speed test. If you open an external reference link, your browser connects to that site.
 
 Cloudflare handles information it receives under its own policy. For questions about Cloudflare's retention, processing locations, or your choices, consult the [Cloudflare privacy policy](https://www.cloudflare.com/privacypolicy/).
 

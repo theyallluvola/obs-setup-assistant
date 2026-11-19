@@ -40,6 +40,24 @@ test('budgets from the lower of measured upload and the verified upload ceiling'
   assert.equal(belowCeiling.effectiveUpload, 40);
 });
 
+test('fallbacks progressively lighten the output or bitrate while keeping the canvas and encoder', () => {
+  let previous = recommend(session);
+  for (let fallbackStep = 1; previous.hasFallback; fallbackStep++) {
+    assert.ok(fallbackStep <= 32);
+    const next = recommend({ ...session, fallbackStep });
+    assert.deepEqual(next.canvas, previous.canvas);
+    assert.equal(next.encoderId, previous.encoderId);
+    assert.ok(next.output[1] <= previous.output[1] && next.fps <= previous.fps && next.bitrate <= previous.bitrate);
+    assert.ok(next.output[1] < previous.output[1] || next.fps < previous.fps || next.bitrate < previous.bitrate);
+    previous = next;
+  }
+  const lower = recommend({ ...session, platform: 'twitch', fallbackStep: 1 });
+  assert.deepEqual(lower.output, [1280, 720]);
+  assert.equal(lower.bitrate, 4500);
+  assert.equal(recommend({ ...session, upload: 0.62 }).hasFallback, false);
+  assert.throws(() => recommend({ ...session, fallbackStep: 33 }));
+});
+
 test('extracts only hardware and registered encoder details from OBS logs', () => {
   const text = `00:01: OBS 33.0.1 (64-bit, windows)
 00:01: CPU Name: Sample CPU
@@ -56,5 +74,8 @@ test('extracts only hardware and registered encoder details from OBS logs', () =
   assert.deepEqual(parseObsLog(text), {
     obs: '33.0.1', cpu: 'Sample CPU', cores: 16, gpus: ['Sample GPU'],
     canvas: 1080, available: ['nvencAv1', 'nvencH264']
+  });
+  assert.deepEqual(parseObsLog(text, { includeEncoderIds: true }).encoderIds, {
+    nvencAv1: 'obs_nvenc_av1_tex', nvencH264: 'obs_nvenc_h264_tex'
   });
 });

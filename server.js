@@ -2,80 +2,180 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { getAsset, isSea } from 'node:sea';
 import { pathToFileURL } from 'node:url';
+import { encoders, recommend } from './advisor.js';
+import { runDesktopBridge } from './desktop-bridge.js';
 import { detectHardware } from './hardware.js';
+import { createObsProfile, ObsProfileError } from './obs-profile.js';
+import { createStreamTests } from './stream-test.js';
 import { measureUpload, UploadLimitError } from './upload.js';
 
 const pages = new Map([
   ['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']],
-  ['/style.css', ['style.css', 'text/css']], ['/advisor.js', ['advisor.js', 'text/javascript']]
+  ['/style.css', ['style.css', 'text/css']], ['/advisor.js', ['advisor.js', 'text/javascript']],
+  ['/assets/Silkscreen-Bold.ttf', ['assets/Silkscreen-Bold.ttf', 'font/ttf']],
+  ['/assets/obs-setup.ico', ['assets/obs-setup.ico', 'image/x-icon']]
 ]);
 
-export function createServer({ detect = detectHardware, measure = measureUpload } = {}) {
+async function readJsonRequest(req) {
+  if (req.headers['content-type'] !== 'application/json') throw new Error();
+  const chunks = [];
+  let length = 0;
+  for await (const chunk of req.iterator({ destroyOnReturn: false })) {
+    length += chunk.length;
+    if (length > 4096) {
+      req.resume();
+      throw new Error();
+    }
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+function profileRecommendation(input) {
+  if (!input || typeof input !== 'object' || Buffer.byteLength(JSON.stringify(input)) > 4096) throw new Error();
+  if (input.upload > 100000 || input.uploadCeiling > 100000 ||
+      !Number.isInteger(input.cores) || input.cores < 0 || input.cores > 4096 ||
+      !Array.isArray(input.available) || input.available.length > Object.keys(encoders).length ||
+      !input.available.every(id => typeof id === 'string' && Object.hasOwn(encoders, id))) {
+    throw new Error();
+  }
+  return recommend(input);
+}
+
+const jsonPaths = new Set(['/api/profile', '/api/stream-test']);
+const apiPaths = new Set(['/api/hardware', '/api/upload', ...jsonPaths]);
+const failure = (status, error) => ({ status, payload: { error } });
+const invalidRecommendation = () => failure(400, 'Generate a recommendation before creating an OBS profile.');
+
+export function createApi({ detect = detectHardware, measure = measureUpload, createProfile = createObsProfile,
+  streamTests = createStreamTests() } = {}) {
   let measuring = false;
+  let creatingProfile = false;
+  return async (route, input, signal) => {
+    signal.throwIfAborted();
+    if (route === '/api/stream-test') {
+      if (input?.action === 'start') return { status: 200, payload: await streamTests.start() };
+      if (input?.action === 'check' && typeof input.id === 'string' && input.id.length === 36) {
+        return { status: 200, payload: await streamTests.check(input.id, signal) };
+      }
+      return failure(400, 'Start a test before checking the OBS log.');
+    }
+    if (route === '/api/hardware') {
+      try {
+        const { encoderIds, ...hardware } = await detect();
+        signal.throwIfAborted();
+        return { status: 200, payload: hardware };
+      } catch {
+        signal.throwIfAborted();
+        return failure(500, 'Hardware detection unavailable.');
+      }
+    }
+    if (route === '/api/profile') {
+      let settings;
+      try { settings = profileRecommendation(input); } catch { return invalidRecommendation(); }
+      if (!settings.encoderId) return failure(422, 'This recommendation does not have an OBS profile to create.');
+      if (creatingProfile) return failure(409, 'An OBS profile is already being created.');
+      creatingProfile = true;
+      try {
+        const { encoderIds } = await detect();
+        signal.throwIfAborted();
+        const profile = await createProfile(settings, { encoderIds });
+        return { status: 201, payload: { name: profile.name } };
+      } catch (error) {
+        signal.throwIfAborted();
+        if (error instanceof ObsProfileError) return failure(422, error.message);
+        return failure(500, 'The OBS profile could not be created.');
+      } finally {
+        creatingProfile = false;
+      }
+    }
+    if (route === '/api/upload') {
+      if (measuring) return failure(409, 'An upload test is already running.');
+      measuring = true;
+      try {
+        return { status: 200, payload: await measure(signal) };
+      } catch (error) {
+        signal.throwIfAborted();
+        return failure(502, error instanceof UploadLimitError ? error.message :
+          'The upload test could not finish. Enter a steady upload result manually.');
+      } finally {
+        measuring = false;
+      }
+    }
+    return failure(404, 'Request unavailable.');
+  };
+}
+
+export function createServer(services) {
+  const call = createApi(services);
   return http.createServer(async (req, res) => {
     const host = '127.0.0.1:' + req.socket.localPort;
     function send(code, body, type = 'application/json') {
       res.writeHead(code, {
-        'Content-Type': type + '; charset=utf-8', 'Cache-Control': 'no-store',
+      'Content-Type': /^(image|font)\//.test(type) ? type : type + '; charset=utf-8', 'Cache-Control': 'no-store',
         'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY',
         'Referrer-Policy': 'no-referrer', 'Cross-Origin-Resource-Policy': 'same-origin',
-        'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+        'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
       });
       res.end(body);
     }
     if (req.headers.host !== host) return send(403, '{"error":"Use the local address printed by the launcher."}');
-    if (req.url === '/api/hardware' || req.url === '/api/upload') {
+    if (apiPaths.has(req.url)) {
       if (req.method !== 'POST') return send(405, '{"error":"Use the control on the local page."}');
       if (req.headers.origin !== 'http://' + host) return send(403, '{"error":"Open the app locally to use this control."}');
-    }
-    if (req.url === '/api/hardware') {
+      const request = new AbortController();
+      res.once('close', () => request.abort());
+      let body;
+      if (jsonPaths.has(req.url)) {
+        try { body = await readJsonRequest(req); } catch {
+          const { status, payload } = req.url === '/api/profile' ? invalidRecommendation() :
+            failure(400, 'Start a test before checking the OBS log.');
+          if (!res.destroyed) send(status, JSON.stringify(payload));
+          return;
+        }
+      }
       try {
-        return send(200, JSON.stringify(await detect()));
+        const { status, payload } = await call(req.url, body, request.signal);
+        if (!res.destroyed) send(status, JSON.stringify(payload));
       } catch {
-        return send(500, '{"error":"Hardware detection unavailable."}');
+        if (!res.destroyed) send(500, '{"error":"Request unavailable."}');
       }
-    }
-    if (req.url === '/api/upload') {
-      if (measuring) return send(409, '{"error":"An upload test is already running."}');
-      measuring = true;
-      const test = new AbortController();
-      res.once('close', () => test.abort());
-      try {
-        const measurement = await measure(test.signal);
-        if (!res.destroyed) return send(200, JSON.stringify(measurement));
-      } catch (error) {
-        if (res.destroyed) return;
-        const message = error instanceof UploadLimitError ? error.message :
-          'The upload test could not finish. Enter a steady upload result manually.';
-        return send(502, JSON.stringify({ error: message }));
-      } finally {
-        measuring = false;
-      }
+      return;
     }
     const page = pages.get(req.url);
     if (req.method !== 'GET' || !page) return send(404, '{"error":"Page unavailable."}');
     try {
       const [file, type] = page;
-      return send(200, await readFile(new URL(file, import.meta.url)), type);
+      const body = isSea() ? Buffer.from(getAsset(file)) : await readFile(new URL(file, import.meta.url));
+      return send(200, body, type);
     } catch {
       return send(500, '{"error":"Could not load the app."}');
     }
   });
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+function startHttpServer() {
   const server = createServer();
   const port = Number(process.env.OBS_ASSISTANT_PORT || 0);
   server.listen(port, '127.0.0.1', () => {
     const url = 'http://127.0.0.1:' + server.address().port;
     console.log('OBS Setup Assistant: ' + url);
     console.log('Keep this window open while using the app. Press Ctrl+C to stop.');
-    if (process.platform === 'win32' && process.argv.includes('--open')) {
+    if (process.platform === 'win32' && !process.argv.includes('--no-open') && (isSea() || process.argv.includes('--open'))) {
       const browser = spawn('cmd.exe', ['/d', '/c', 'start', '""', url], {
         windowsVerbatimArguments: true, windowsHide: true, stdio: 'ignore'
       });
       browser.on('error', () => console.log('Open the address above in your browser.'));
     }
   });
+}
+
+if (isSea() || (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href)) {
+  if (process.argv.includes('--desktop-bridge')) {
+    runDesktopBridge(createApi()).catch(() => { process.exitCode = 1; });
+  } else {
+    startHttpServer();
+  }
 }
