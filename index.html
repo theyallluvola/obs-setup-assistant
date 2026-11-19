@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OBS Setup Assistant</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <main>
+    <header><span class="mark" aria-hidden="true">◉</span><span>OBS Setup Assistant</span></header>
+    <h1>Dial in your stream.</h1>
+    <p class="lede">Get OBS settings matched to your encoder, upload speed, and what you stream.</p>
+    <div class="workspace">
+      <div>
+        <section class="panel hardware" aria-labelledby="hardware-title">
+          <div class="section-head"><h2 id="hardware-title">Your PC</h2><button type="button" id="scan" class="quiet">Scan again</button></div>
+          <p id="hardware" aria-live="polite">Checking your hardware…</p>
+        </section>
+        <form class="panel" id="stream">
+          <h2>Stream setup</h2>
+          <div class="pair">
+            <label>Platform<select name="platform"><option value="youtube">YouTube</option><option value="twitch">Twitch</option></select></label>
+            <label>Content<select name="content"><option value="gameplay">Gameplay</option><option value="talk">Just Chatting</option></select></label>
+          </div>
+          <div class="pair">
+            <label>Base canvas<select name="canvas"><option value="1440">2560 × 1440</option><option value="1080" selected>1920 × 1080</option><option value="720">1280 × 720</option><option value="480">854 × 480</option></select></label>
+            <label>Encoder<select name="encoder">
+              <option value="auto">Auto detect</option><option value="nvencAv1">NVIDIA NVENC AV1 + H.264</option>
+              <option value="nvencH264">NVIDIA NVENC H.264</option><option value="qsvAv1">Intel Quick Sync AV1 + H.264</option>
+              <option value="qsvH264">Intel Quick Sync H.264</option><option value="amfAv1">AMD AV1 + H.264</option>
+              <option value="amfH264">AMD H.264</option><option value="x264">x264 (CPU)</option>
+            </select></label>
+          </div>
+          <label for="upload">Upload speed</label>
+          <div class="upload-row"><div class="unit"><input id="upload" name="upload" type="number" step="any" min="0.01" max="100000" required placeholder="0.0"><span>Mbps</span></div>
+            <button type="button" class="quiet" id="speed">Test upload</button></div>
+          <p class="note" id="network" role="status">The test sends up to 27 MB of sample data to Cloudflare.</p>
+          <button type="submit" class="primary">Recommend settings</button>
+        </form>
+      </div>
+      <section class="panel result" aria-labelledby="result-title">
+        <div class="section-head"><h2 id="result-title">Recommended settings</h2><button type="button" class="quiet" id="copy" hidden>Copy settings</button></div>
+        <div id="result" aria-live="polite"><p class="empty">Enter your upload speed or run the test to get a streaming profile.</p></div>
+        <p id="copy-status" class="note" role="status"></p>
+      </section>
+    </div>
+    <footer><a href="https://support.google.com/youtube/answer/2853702">YouTube guidelines</a><a href="https://help.twitch.tv/s/article/broadcasting-guidelines?language=en_US">Twitch guidelines</a><a href="https://obsproject.com/kb/stream-connection-troubleshooting/">OBS connection guide</a></footer>
+  </main>
+</body>
+</html>
